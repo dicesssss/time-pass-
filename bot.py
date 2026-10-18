@@ -79,10 +79,19 @@ async def manual_dice_guard(event):
 async def main():
     asyncio.create_task(start_web_server())
     await client.connect()
+    
     if not await client.is_user_authorized():
         print("Error: Session String is invalid or expired!")
         return
+        
     print("🔥 2-Second Precise Dice Guard is online and running!")
+    
+    # Bot start hone par Saved Messages mein notification bhejne ke liye
+    try:
+        await client.send_message('me', "🔥 **Dice Guard Bot successfully start ho gaya hai aur active hai!**")
+    except Exception as e:
+        print(f"Could not send startup message: {e}")
+        
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
