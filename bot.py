@@ -5,7 +5,8 @@ from telethon.tl.types import InputMediaDice
 
 API_ID = 10079905
 API_HASH = "e4a5fa251e2e055f26e5c2add8401530"
-SESSION_STRING = "1BVtsOK4Bu5L_eDXm__Exrhcovc5hd0pYwgfDp6Y0OpKuNp4rirKOvZUaOYxXSOruvJv715n3GwupxcQpMjx6YkV84WJFt0U1LTLs8nQUDx22fDHjKmxE47l5e0RniVmlRhUHXmqLDd1BIzSLhLjOF4DpWZPHomSwVGR7OFo1-KgFNa7TpXOrUCBGi3PvOLneNuvdy3E5ZwtMRpHt8WLCWsi59uCjDLPpYr9U8L-wvuz1gWk1w3okOq1Jqc7CG3TV7WJWgCZYoMkUQgMaiC_ACj09A654IZTpbta3WdRwal9FAJ-1GMJnK4a_2MRWP8DywBa-vK-v_8lT2805by6iN4Av4l5uJZ4="
+# Aapki nayi fresh string yahan set hai
+SESSION_STRING = "1BVtsOK4BuzlXZbH99COnFMh1eppsdRy8dQekURrL8NJl1NdQJrHNgrEOSqCGrOs1ZU7FGVrXUCoPz3iTADEul5sGo_OU2ZXvoWwvXtngi2How4EkXQbEo4156FmFHVl_ZP2HtcyAsLjyofu-hROudqcEyezd9XmcoQJRgi1l_zJaxGGMq2-LO2t_kdLHiywnHi-rWIGO-QUZ03gosNp16bzwIFGpLj9pgMHmYNZJO-UVIy7zJbBcMGRYORDXG4lY3pF3b_QCX1m_2ok0yu8sy53Kteuq1vdEl9smICTQcG9CvJJP6OwE3tVtHSRD9s31nV-EpYkyN_W_FmwL-cY6UjtMIPV_aP8="
 
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
@@ -18,12 +19,13 @@ async def rigged_dice(event):
     except Exception:
         pass
     
-    # Yahan hum proper Interactive Animated Dice bhej rahe hain (Plain text '🎲' ki jagah)
+    # Interactive animated dice bhej rahe hain
     msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
     
+    # Ultra-fast polling loop
     while True:
-        # Dice animation poora hone ke liye 2.2 seconds ka wait zaroori hai
-        await asyncio.sleep(2.2)
+        # Bilkul minimal delay taaki speed lightning-fast rahe
+        await asyncio.sleep(0.15)
         
         try:
             current_msg = await client.get_messages(event.chat_id, ids=msg.id)
@@ -31,17 +33,16 @@ async def rigged_dice(event):
             if current_msg and current_msg.media and hasattr(current_msg.media, 'dice'):
                 dice_value = current_msg.media.dice.value
                 
-                # Agar wahi number aa gaya jo aapne manga tha, toh yahin rok do
+                # Agar target number match ho gaya, toh loop yahin khatam
                 if dice_value == desired_number:
                     break
                 
-                # Agar nahi aaya, toh purana delete karke naya animated dice feko
+                # Turant purana delete karke naya feko
                 await current_msg.delete()
                 msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
                 
         except Exception as e:
-            print(f"Error: {e}")
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.15)
             continue
 
 async def main():
@@ -49,7 +50,7 @@ async def main():
     if not await client.is_user_authorized():
         print("Error: Session String is invalid!")
         return
-    print("🎲 Animated Rigged Dice Bot is online and running!")
+    print("⚡ Ultra-Fast Lightning Dice Bot is online & running!")
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
