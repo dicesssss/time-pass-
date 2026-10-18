@@ -14,17 +14,16 @@ if not SESSION_STRING:
 
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
-# Thread-safe tracking and memory management
-processed_messages = set()
-target_dice_goals = {}  # Tracks specific desired numbers for command calls (e.g., msg_id -> target_value)
+# Thread-safe sets and maps to manage concurrency and prevent duplicate processing
+processed_events = set()
+target_dice_goals = {}  # Tracks custom command goals (e.g., msg_id -> target value)
 
-async def cleanup_memory():
-    """Periodically trims the tracking set to prevent unbounded memory growth."""
+async def memory_cleanup_daemon():
+    """Background task to clear tracking memory and prevent unbounded growth."""
     while True:
         await asyncio.sleep(600)  # Clean every 10 minutes
-        if len(processed_messages) > 2000:
-            # Keep the most recent items roughly by clearing half
-            processed_messages.clear()
+        if len(processed_events) > 2000:
+            processed_events.clear()
             target_dice_goals.clear()
 
 # 1. Command Handler (.dice or .dice [3-6])
@@ -43,32 +42,32 @@ async def cmd_dice(event):
         if desired_number:
             target_dice_goals[new_msg.id] = desired_number
     except Exception as e:
-        print(f"Failed to send initial command dice: {e}")
+        print(f"Failed to dispatch command dice: {e}")
 
-# 2. Event-Driven MessageEdited Handler (Ultra-low latency detection)
+# 2. Ultra-Low-Latency Event-Driven MessageEdited Handler
 @client.on(events.MessageEdited(outgoing=True))
 async def dice_edit_handler(event):
     try:
-        # Verify that the edited message contains a dice media object
+        # Verify message contains valid dice media
         if event.media and hasattr(event.media, 'dice') and event.media.dice.emoticon == '🎲':
             msg_id = event.id
             chat_id = event.chat_id
             dice_value = event.media.dice.value
 
-            # 0 indicates the animation is still rolling on the server side
+            # 0 signifies the server is still processing the dice roll animation
             if dice_value == 0:
                 return
 
-            # Prevent duplicate processing of the exact same update event
-            event_signature = f"{chat_id}-{msg_id}-{dice_value}"
-            if event_signature in processed_messages:
+            # Construct unique event signature to block duplicate MTProto duplicate pushes
+            event_sig = f"{chat_id}-{msg_id}-{dice_value}"
+            if event_sig in processed_events:
                 return
-            processed_messages.add(event_signature)
+            processed_events.add(event_sig)
 
-            # Determine target condition (custom command goal or default guard rule: delete 1 and 2)
+            # Evaluate target criteria (command goal vs default guard rule)
             desired_number = target_dice_goals.get(msg_id)
-            
             should_reroll = False
+
             if desired_number:
                 if dice_value != desired_number:
                     should_reroll = True
@@ -77,17 +76,18 @@ async def dice_edit_handler(event):
                     should_reroll = True
 
             if should_reroll:
-                print(f"[Guard] Unwanted dice value ({dice_value}) detected in chat {chat_id}. Deleting...")
+                print(f"[Guard] Unwanted roll ({dice_value}) intercepted in chat {chat_id}. Deleting...")
                 try:
                     await client.delete_messages(chat_id, [msg_id])
                 except FloodWaitError as fw:
-                    print(f"Rate limited! Sleeping for {fw.seconds} seconds.")
+                    print(f"Rate limit encountered! Pausing for {fw.seconds} seconds.")
                     await asyncio.sleep(fw.seconds)
+                    return
                 except Exception as e:
-                    print(f"Deletion failed for message {msg_id}: {e}")
+                    print(f"Deletion error for message {msg_id}: {e}")
                     return
 
-                # Send replacement dice
+                # Send fresh replacement dice
                 try:
                     new_msg = await client.send_file(chat_id, file=InputMediaDice(emoticon='🎲'))
                     if desired_number:
@@ -95,29 +95,29 @@ async def dice_edit_handler(event):
                 except Exception as e:
                     print(f"Failed to send replacement dice: {e}")
             else:
-                # Target value achieved or safe result (3-6), clean up tracking goals if any
+                # Safe outcome achieved; purge tracking goal if present
                 if msg_id in target_dice_goals:
                     del target_dice_goals[msg_id]
 
     except Exception as e:
-        print(f"Error inside dice_edit_handler: {e}")
+        print(f"Error within dice_edit_handler: {e}")
 
 async def main():
-    # Start the keep-alive background server for 24/7 hosting uptime
+    # Initialize background web server and memory cleanup daemons
     asyncio.create_task(start_web_server())
-    asyncio.create_task(cleanup_memory())
+    asyncio.create_task(memory_cleanup_daemon())
 
     await client.connect()
     if not await client.is_user_authorized():
-        print("Error: Session String is invalid, expired, or unauthorized!")
+        print("Error: Session String is unauthorized, invalid, or expired!")
         return
 
     print("🔥 Ultra-Low-Latency Event-Driven Dice Guard is online and running!")
 
     try:
-        await client.send_message('me', "🔥 **Dice Guard Bot successfully started and active (Event-Driven Mode)!**")
+        await client.send_message('me', "🔥 **Dice Guard Bot successfully online (Event-Driven Mode)!**")
     except Exception as e:
-        print(f"Could not send startup notification: {e}")
+        print(f"Could not dispatch startup notification: {e}")
 
     await client.run_until_disconnected()
 
