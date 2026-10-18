@@ -30,12 +30,13 @@ async def rigged_dice_command(event):
     msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
     
     while True:
-        # Exact 2 seconds wait taaki animation poori ho aur sahi value read ho
         await asyncio.sleep(2.0)
         try:
-            current_msg = await client.get_messages(event.chat_id, ids=msg.id)
-            if current_msg and current_msg.media and hasattr(current_msg.media, 'dice'):
-                dice_value = current_msg.media.dice.value
+            # Message ko directly reload karo server se latest value lene ke liye
+            await msg.reload()
+            if msg.media and hasattr(msg.media, 'dice'):
+                dice_value = msg.media.dice.value
+                print(f"Dice Value Checked: {dice_value}")
                 
                 if dice_value == 0:
                     continue
@@ -44,9 +45,11 @@ async def rigged_dice_command(event):
                     break
                 
                 if dice_value in [1, 2]:
-                    await current_msg.delete()
+                    print(f"Bad dice ({dice_value}) detected! Deleting and re-rolling...")
+                    await msg.delete()
                     msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
-        except Exception:
+        except Exception as e:
+            print(f"Error in command dice loop: {e}")
             await asyncio.sleep(0.5)
             continue
 
@@ -61,19 +64,23 @@ async def manual_dice_guard(event):
         while True:
             await asyncio.sleep(2.0)
             try:
-                current_msg = await client.get_messages(event.chat_id, ids=msg.id)
-                if current_msg and current_msg.media and hasattr(current_msg.media, 'dice'):
-                    dice_value = current_msg.media.dice.value
+                # Message ko directly reload karo server se latest value lene ke liye
+                await msg.reload()
+                if msg.media and hasattr(msg.media, 'dice'):
+                    dice_value = msg.media.dice.value
+                    print(f"Manual Dice Value Checked: {dice_value}")
                     
                     if dice_value == 0:
                         continue
                         
                     if dice_value in [1, 2]:
-                        await current_msg.delete()
+                        print(f"Bad dice ({dice_value}) detected! Deleting and re-rolling...")
+                        await msg.delete()
                         msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
                     else:
                         break
-            except Exception:
+            except Exception as e:
+                print(f"Error in manual dice loop: {e}")
                 break
 
 async def main():
@@ -84,9 +91,8 @@ async def main():
         print("Error: Session String is invalid or expired!")
         return
         
-    print("🔥 2-Second Precise Dice Guard is online and running!")
+    print("🔥 Fixed Dice Guard with .reload() is online and running!")
     
-    # Bot start hone par Saved Messages mein notification bhejne ke liye
     try:
         await client.send_message('me', "🔥 **Dice Guard Bot successfully start ho gaya hai aur active hai!**")
     except Exception as e:
