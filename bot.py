@@ -28,15 +28,16 @@ async def rigged_dice_command(event):
         pass
     
     msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
+    chat_id = event.chat_id
+    msg_id = msg.id
     
     while True:
         await asyncio.sleep(2.0)
         try:
-            # Message ko directly reload karo server se latest value lene ke liye
-            await msg.reload()
-            if msg.media and hasattr(msg.media, 'dice'):
-                dice_value = msg.media.dice.value
-                print(f"Dice Value Checked: {dice_value}")
+            current_msg = await client.get_messages(chat_id, ids=msg_id)
+            if current_msg and current_msg.media and hasattr(current_msg.media, 'dice'):
+                dice_value = current_msg.media.dice.value
+                print(f"[Command] Dice Value: {dice_value}")
                 
                 if dice_value == 0:
                     continue
@@ -45,42 +46,45 @@ async def rigged_dice_command(event):
                     break
                 
                 if dice_value in [1, 2]:
-                    print(f"Bad dice ({dice_value}) detected! Deleting and re-rolling...")
-                    await msg.delete()
-                    msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
+                    print(f"[Command] Bad dice ({dice_value})! Deleting via ID...")
+                    await client.delete_messages(chat_id, [msg_id])
+                    new_msg = await client.send_file(chat_id, file=InputMediaDice(emoticon='🎲'))
+                    msg_id = new_msg.id
         except Exception as e:
-            print(f"Error in command dice loop: {e}")
-            await asyncio.sleep(0.5)
+            print(f"Error in command loop: {e}")
+            await asyncio.sleep(1.0)
             continue
 
-# 2. Manual Dice Guard (Bina command ke fekne par bhi)
+# 2. Manual Dice Guard (Bina command ke fekne par)
 @client.on(events.NewMessage(outgoing=True))
 async def manual_dice_guard(event):
     if event.media and hasattr(event.media, 'dice') and event.media.dice.emoticon == '🎲':
         if event.raw_text and event.raw_text.startswith('.'):
             return
             
-        msg = event.message
+        chat_id = event.chat_id
+        msg_id = event.message.id
+        
         while True:
             await asyncio.sleep(2.0)
             try:
-                # Message ko directly reload karo server se latest value lene ke liye
-                await msg.reload()
-                if msg.media and hasattr(msg.media, 'dice'):
-                    dice_value = msg.media.dice.value
-                    print(f"Manual Dice Value Checked: {dice_value}")
+                current_msg = await client.get_messages(chat_id, ids=msg_id)
+                if current_msg and current_msg.media and hasattr(current_msg.media, 'dice'):
+                    dice_value = current_msg.media.dice.value
+                    print(f"[Manual] Dice Value: {dice_value}")
                     
                     if dice_value == 0:
                         continue
                         
                     if dice_value in [1, 2]:
-                        print(f"Bad dice ({dice_value}) detected! Deleting and re-rolling...")
-                        await msg.delete()
-                        msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
+                        print(f"[Manual] Bad dice ({dice_value})! Deleting via ID...")
+                        await client.delete_messages(chat_id, [msg_id])
+                        new_msg = await client.send_file(chat_id, file=InputMediaDice(emoticon='🎲'))
+                        msg_id = new_msg.id
                     else:
                         break
             except Exception as e:
-                print(f"Error in manual dice loop: {e}")
+                print(f"Error in manual loop: {e}")
                 break
 
 async def main():
@@ -91,7 +95,7 @@ async def main():
         print("Error: Session String is invalid or expired!")
         return
         
-    print("🔥 Fixed Dice Guard with .reload() is online and running!")
+    print("🔥 Ultimate Bulletproof Dice Guard is online and running!")
     
     try:
         await client.send_message('me', "🔥 **Dice Guard Bot successfully start ho gaya hai aur active hai!**")
