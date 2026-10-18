@@ -13,92 +13,72 @@ if not SESSION_STRING:
 
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
-# 1. Command Handler (.dice ya .dice [number])
-@client.on(events.NewMessage(outgoing=True, pattern=r'\.dice(\s*([1-6]))?'))
-async def rigged_dice_command(event):
-    match_str = event.pattern_match.group(1)
-    desired_number = int(match_str.strip()) if match_str else None
-    
-    if desired_number in [1, 2]:
-        desired_number = None
+# Set to prevent duplicate handling of the same message edit event
+processed_dice = set()
 
+# 1. Quick command handler for .dice
+@client.on(events.NewMessage(outgoing=True, pattern=r'\.dice'))
+async def cmd_dice(event):
     try:
         await event.delete()
     except Exception:
         pass
-    
-    msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
-    chat_id = event.chat_id
-    msg_id = msg.id
-    
-    while True:
-        await asyncio.sleep(2.0)
-        try:
-            current_msg = await client.get_messages(chat_id, ids=msg_id)
-            if current_msg and current_msg.media and hasattr(current_msg.media, 'dice'):
-                dice_value = current_msg.media.dice.value
-                print(f"[Command] Dice Value: {dice_value}")
-                
-                if dice_value == 0:
-                    continue
-                
-                if (desired_number and dice_value == desired_number) or (not desired_number and dice_value in [3, 4, 5, 6]):
-                    break
-                
-                if dice_value in [1, 2]:
-                    print(f"[Command] Bad dice ({dice_value})! Deleting via ID...")
-                    await client.delete_messages(chat_id, [msg_id])
-                    new_msg = await client.send_file(chat_id, file=InputMediaDice(emoticon='🎲'))
-                    msg_id = new_msg.id
-        except Exception as e:
-            print(f"Error in command loop: {e}")
-            await asyncio.sleep(1.0)
-            continue
+    await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
 
-# 2. Manual Dice Guard (Bina command ke fekne par)
-@client.on(events.NewMessage(outgoing=True))
-async def manual_dice_guard(event):
-    if event.media and hasattr(event.media, 'dice') and event.media.dice.emoticon == '🎲':
-        if event.raw_text and event.raw_text.startswith('.'):
-            return
+# 2. Event-Driven MessageEdited Handler (Zero polling, instant response)
+@client.on(events.MessageEdited(outgoing=True))
+async def dice_edit_handler(event):
+    try:
+        # Check if the edited message contains a dice media
+        if event.media and hasattr(event.media, 'dice') and event.media.dice.emoticon == '🎲':
+            msg_id = event.id
             
-        chat_id = event.chat_id
-        msg_id = event.message.id
-        
-        while True:
-            await asyncio.sleep(2.0)
-            try:
-                current_msg = await client.get_messages(chat_id, ids=msg_id)
-                if current_msg and current_msg.media and hasattr(current_msg.media, 'dice'):
-                    dice_value = current_msg.media.dice.value
-                    print(f"[Manual] Dice Value: {dice_value}")
+            # Prevent handling the same event twice
+            if msg_id in processed_dice:
+                return
+                
+            dice_value = event.media.dice.value
+            
+            # 0 means the dice animation is still rolling on Telegram's server
+            if dice_value == 0:
+                return
+                
+            # If a 1 or 2 lands, delete it instantly and re-roll
+            if dice_value in [1, 2]:
+                processed_dice.add(msg_id)
+                print(f"[{msg_id}] Bad dice ({dice_value}) caught via MessageEdited! Re-rolling...")
+                
+                try:
+                    await event.delete()
+                except Exception as e:
+                    print(f"Failed to delete message: {e}")
+                
+                try:
+                    await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
+                except Exception as e:
+                    print(f"Failed to send new dice: {e}")
                     
-                    if dice_value == 0:
-                        continue
-                        
-                    if dice_value in [1, 2]:
-                        print(f"[Manual] Bad dice ({dice_value})! Deleting via ID...")
-                        await client.delete_messages(chat_id, [msg_id])
-                        new_msg = await client.send_file(chat_id, file=InputMediaDice(emoticon='🎲'))
-                        msg_id = new_msg.id
-                    else:
-                        break
-            except Exception as e:
-                print(f"Error in manual loop: {e}")
-                break
+            # Prevent memory bloat by clearing old tracked IDs periodically
+            if len(processed_dice) > 1000:
+                processed_dice.clear()
+                
+    except Exception as e:
+        print(f"Error in dice_edit_handler: {e}")
 
 async def main():
+    # Start the keep-alive background server for 24/7 uptime
     asyncio.create_task(start_web_server())
-    await client.connect()
     
+    await client.connect()
     if not await client.is_user_authorized():
         print("Error: Session String is invalid or expired!")
         return
         
-    print("🔥 Ultimate Bulletproof Dice Guard is online and running!")
+    print("🔥 Event-Driven Ultra-Fast Dice Guard is online and running!")
     
+    # Startup notification in Saved Messages
     try:
-        await client.send_message('me', "🔥 **Dice Guard Bot successfully start ho gaya hai aur active hai!**")
+        await client.send_message('me', "🔥 **Event-Driven Dice Guard Bot is successfully online!**")
     except Exception as e:
         print(f"Could not send startup message: {e}")
         
