@@ -5,16 +5,16 @@ from telethon.tl.types import InputMediaDice
 
 API_ID = 10079905
 API_HASH = "e4a5fa251e2e055f26e5c2add8401530"
-SESSION_STRING = "1BVtsOK4Bu5x1x_UUYagKfCcVkZ01mSJvR9RAHZHpl8P0581ggzsGj_SZfE2_nBztplT6s8qfD1C8XPBPry97DXcVUmWvcb1vVQON63j6HB5g8v5H4FR2Nt8-XZv3Q-dFGIvQgT9UDH9tACr4J9zi8-n4kTeVj85ys_dnP37qdFH61fmgMNwpezNZGwudbppw7x8Uh56J4_s9WG5_DJAYuEwhtCgBVKFSqEL2d7a3l5BvrZkQIZVja8eVQtr3XxPv6gGBmKoYXe6hVb856pRTKwrDL8gG2AbMisu6CJBaezb0HlRCKOEgnDzUiPwJ1qRDYYQJrpgalIvRczeOio038t1CA3aXXH0="
+# Teri nayi fresh session string yahan set hai
+SESSION_STRING = "1BVtsOK4Bu5bgSNU5dl9jvi9dwlD7fV4DamP4abaDKjYjlEPbie836YnPxD6EJVOiKu6zClNm_zlJfpSyMKg_ZvS2cu1IpTFoNOH_ZiZbgg9OWbokdoTKwQ3BUcjwgORUcX0KJFJhR1zroNP5-Utu-WwJosSjjV3MUKMsNvHwpgEARVDGmVpGHrsoThnRmo59Uij4ynPr0RMxG8EwwHgn_bvYs7KBgajTLvZvj4t1e7L_pwoG4tm8u4QpHyLIQ5sQYInQXNC4AyjSeY9lkGgBxyjCxWy5U-QiMNK_DwNvy4xEVSBoXiG8ZKWVzXFc6PvcWMv89ONjnNUNy0ozuyjxCbuaUakkSYY="
 
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
-# 1. Command handler: .dice ya .dice6 ke liye
+# 1. Command ke liye (.dice ya .dice6)
 @client.on(events.NewMessage(outgoing=True, pattern=r'\.dice(\s*[1-6])?'))
 async def rigged_dice(event):
     match_str = event.pattern_match.group(1)
     desired_number = int(match_str.strip()) if match_str else None
-    avoid_one = True if not desired_number else False
     
     try:
         await event.delete()
@@ -24,32 +24,44 @@ async def rigged_dice(event):
     msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
     
     while True:
-        await asyncio.sleep(1.2)
+        # Telegram server ke animation complete hone ka proper wait
+        await asyncio.sleep(2.0)
+        
         try:
             current_msg = await client.get_messages(event.chat_id, ids=msg.id)
+            
             if current_msg and current_msg.media and hasattr(current_msg.media, 'dice'):
                 dice_value = current_msg.media.dice.value
-                if (desired_number and dice_value == desired_number) or (avoid_one and dice_value != 1):
+                
+                # Agar specific number manga hai aur wo aa gaya, ya phir bina number ke 1 ke alawa kuch aa gaya -> Stop!
+                if (desired_number and dice_value == desired_number) or (not desired_number and dice_value != 1):
                     break
+                
+                # Agar 1 aa gaya ya match nahi hua, toh delete karke naya feko
                 await current_msg.delete()
                 msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
-        except Exception:
+                
+        except Exception as e:
             await asyncio.sleep(0.5)
             continue
 
-# 2. Background guard: Agar tu manually bhi koi dice fekega aur 1 aa gaya, toh bot use turant hata dega!
+# 2. Global Anti-1 Guard: Agar tu bina command ke bhi manually dice fekega aur 1 aaya, toh bot hata dega!
 @client.on(events.NewMessage(outgoing=True))
 async def manual_dice_guard(event):
-    # Agar message me dice media hai (aur koi command nahi hai)
     if event.media and hasattr(event.media, 'dice') and event.media.dice.emoticon == '🎲':
+        # Agar yeh command message nahi hai (matlab manual roll hai)
+        if event.raw_text.startswith('.'):
+            return
+            
         msg = event.message
         while True:
-            await asyncio.sleep(1.2)
+            await asyncio.sleep(2.0)
             try:
                 current_msg = await client.get_messages(event.chat_id, ids=msg.id)
                 if current_msg and current_msg.media and hasattr(current_msg.media, 'dice'):
                     dice_value = current_msg.media.dice.value
-                    # Agar manual fekne par bhi 1 aa gaya, toh delete karke naya feko jab tak 1 na hate
+                    
+                    # Agar manual roll mein bhi 1 aa gaya, toh turant badal do!
                     if dice_value == 1:
                         await current_msg.delete()
                         msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
@@ -63,7 +75,7 @@ async def main():
     if not await client.is_user_authorized():
         print("Error: Session String is invalid!")
         return
-    print("🛡️ Anti-1 Background Guard & Rigged Dice Bot is online!")
+    print("🛡️ Anti-1 Absolute Guard Bot is online & running!")
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
