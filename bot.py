@@ -1,125 +1,115 @@
 import asyncio
 import os
-from telethon import TelegramClient, events
+import time
+import random
+from telethon import TelegramClient, functions
 from telethon.errors import FloodWaitError
-from telethon.sessions import StringSession
-from telethon.tl.types import InputMediaDice
+from flask import Flask
+from threading import Thread
 
-from config import API_ID, API_HASH, SESSION_STRING
-from keep_alive import start_web_server
+# --- Railway Keep-Alive Flask Server ---
+app = Flask('')
 
-if not SESSION_STRING:
-    print("Error: SESSION_STRING environment variable is missing!")
-    exit(1)
+@app.route('/')
+def home():
+    return "Single Account Userbot Sniper is Running!"
 
-client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+def run_flask():
+    app.run(host='0.0.0.0', port=8080)
 
-# Thread-safe sets and maps to manage concurrency and prevent duplicate processing
-processed_events = set()
-target_dice_goals = {}  # Tracks custom command goals (e.g., msg_id -> target value)
+def keep_alive():
+    t = Thread(target=run_flask)
+    t.start()
 
-async def memory_cleanup_daemon():
-    """Background task to clear tracking memory and prevent unbounded growth."""
-    while True:
-        await asyncio.sleep(600)  # Clean every 10 minutes
-        if len(processed_events) > 2000:
-            processed_events.clear()
-            target_dice_goals.clear()
+# --- Configuration ---
+API_ID = int(os.environ.get("API_ID", 0))
+API_HASH = os.environ.get("API_HASH", "")
+# Yahan hum ek hi session string ka use karenge
+SESSION_STRING = os.environ.get("SESSION_STRING", "")
 
-# 1. Command Handler (.dice or .dice [3-6])
-@client.on(events.NewMessage(outgoing=True, pattern=r'\.dice(\s*([1-6]))?'))
-async def cmd_dice(event):
-    match_str = event.pattern_match.group(1)
-    desired_number = int(match_str.strip()) if match_str else None
-
-    try:
-        await event.delete()
-    except Exception:
-        pass
-
-    try:
-        new_msg = await client.send_file(event.chat_id, file=InputMediaDice(emoticon='🎲'))
-        if desired_number:
-            target_dice_goals[new_msg.id] = desired_number
-    except Exception as e:
-        print(f"Failed to dispatch command dice: {e}")
-
-# 2. Ultra-Low-Latency Event-Driven MessageEdited Handler
-@client.on(events.MessageEdited(outgoing=True))
-async def dice_edit_handler(event):
-    try:
-        # Verify message contains valid dice media
-        if event.media and hasattr(event.media, 'dice') and event.media.dice.emoticon == '🎲':
-            msg_id = event.id
-            chat_id = event.chat_id
-            dice_value = event.media.dice.value
-
-            # 0 signifies the server is still processing the dice roll animation
-            if dice_value == 0:
-                return
-
-            # Construct unique event signature to block duplicate MTProto duplicate pushes
-            event_sig = f"{chat_id}-{msg_id}-{dice_value}"
-            if event_sig in processed_events:
-                return
-            processed_events.add(event_sig)
-
-            # Evaluate target criteria (command goal vs default guard rule)
-            desired_number = target_dice_goals.get(msg_id)
-            should_reroll = False
-
-            if desired_number:
-                if dice_value != desired_number:
-                    should_reroll = True
-            else:
-                if dice_value in [1, 2]:
-                    should_reroll = True
-
-            if should_reroll:
-                print(f"[Guard] Unwanted roll ({dice_value}) intercepted in chat {chat_id}. Deleting...")
-                try:
-                    await client.delete_messages(chat_id, [msg_id])
-                except FloodWaitError as fw:
-                    print(f"Rate limit encountered! Pausing for {fw.seconds} seconds.")
-                    await asyncio.sleep(fw.seconds)
-                    return
-                except Exception as e:
-                    print(f"Deletion error for message {msg_id}: {e}")
-                    return
-
-                # Send fresh replacement dice
-                try:
-                    new_msg = await client.send_file(chat_id, file=InputMediaDice(emoticon='🎲'))
-                    if desired_number:
-                        target_dice_goals[new_msg.id] = desired_number
-                except Exception as e:
-                    print(f"Failed to send replacement dice: {e}")
-            else:
-                # Safe outcome achieved; purge tracking goal if present
-                if msg_id in target_dice_goals:
-                    del target_dice_goals[msg_id]
-
-    except Exception as e:
-        print(f"Error within dice_edit_handler: {e}")
+TARGET_USERNAME = "vipiya"
 
 async def main():
-    # Initialize background web server and memory cleanup daemons
-    asyncio.create_task(start_web_server())
-    asyncio.create_task(memory_cleanup_daemon())
-
+    keep_alive()
+    print("Starting Single Account Userbot Sniper...")
+    
+    # Client initialize karna single session string ke sath
+    client = TelegramClient(SESSION_STRING, API_ID, API_HASH)
     await client.connect()
+    
     if not await client.is_user_authorized():
-        print("Error: Session String is unauthorized, invalid, or expired!")
+        print("❌ Session string unauthorized ya invalid hai!")
         return
-
-    print("🔥 Ultra-Low-Latency Event-Driven Dice Guard is online and running!")
-
+        
+    me = await client.get_me()
+    print(f"✅ Logged in as: {me.first_name} (@{me.username or 'NoUsername'})")
+    
+    # Deploy hote hi Saved Messages mein notification bhejna
     try:
-        await client.send_message('me', "🔥 **Dice Guard Bot successfully online (Event-Driven Mode)!**")
+        await client.send_message("me", f"🚀 **Single Account Userbot Successfully Deploy Ho Gaya Hai!**\nTarget: `@{TARGET_USERNAME}`\nChecking chalu kar di gayi hai.")
+        print("✅ Deploy notification sent to Saved Messages!")
     except Exception as e:
-        print(f"Could not dispatch startup notification: {e}")
-
-    await client.run_until_disconnected()
+        print(f"⚠️ Could not send deploy notification: {e}")
+        
+    print(f"🚀 Sniper loop started for @{TARGET_USERNAME}...")
+    total_checks = 0
+    flood_till = 0
+    
+    try:
+        while True:
+            current_time = time.time()
+            
+            # FloodWait check
+            if current_time < flood_till:
+                remaining = int(flood_till - current_time)
+                print(f"⏳ FloodWait active: sleeping for {remaining}s...")
+                await asyncio.sleep(remaining)
+                continue
+                
+            try:
+                total_checks += 1
+                print(f"[{total_checks}] Checking @{TARGET_USERNAME}...")
+                
+                # Check availability
+                result = await client(functions.account.CheckUsernameRequest(
+                    username=TARGET_USERNAME
+                ))
+                
+                if result:
+                    print(f"🔥 TARGET APPEARS FREE: @{TARGET_USERNAME}! Claiming on profile...")
+                    
+                    # Claiming directly to profile
+                    try:
+                        await client(functions.account.UpdateUsernameRequest(
+                            username=TARGET_USERNAME
+                        ))
+                        
+                        success_msg = f"🎉 **Username Successfully Claimed on Profile!**\n\nTarget: `@{TARGET_USERNAME}`"
+                        print(success_msg)
+                        await client.send_message("me", success_msg)
+                        break
+                        
+                    except Exception as claim_err:
+                        print(f"⚠️ Claim failed: {claim_err}")
+                else:
+                    print(f"🔴 @{TARGET_USERNAME} is still taken.")
+                    
+            except FloodWaitError as e:
+                wait_sec = e.seconds
+                flood_till = time.time() + wait_sec
+                print(f"⚠️ Hit FloodWait! Pausing for {wait_sec} seconds.")
+                await client.send_message("me", f"⚠️ **FloodWait Alert:** {wait_sec} seconds ka wait aa gaya hai.")
+            except Exception as e:
+                print(f"⚠️ Check error: {e}")
+                
+            # ~50 seconds base delay with random jitter (+/- 5 seconds)
+            sleep_time = random.uniform(45.0, 55.0)
+            await asyncio.sleep(sleep_time)
+            
+    except Exception as err:
+        print(f"❌ Userbot crashed: {err}")
+    finally:
+        await client.disconnect()
 
 if __name__ == '__main__':
     asyncio.run(main())
